@@ -16,7 +16,7 @@ input[type=number]{-moz-appearance:textfield;}
 input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
 button{-webkit-appearance:none;font-family:Georgia,'Times New Roman',serif;cursor:pointer;}
-.tab-btn{flex:1;padding:11px 0;background:transparent;border:none;border-bottom:2px solid transparent;color:#6B5B45;font-size:11px;letter-spacing:2px;text-transform:uppercase;transition:all 0.3s;}
+.tab-btn{flex:1;padding:11px 0;background:transparent;border:none;border-bottom:2px solid transparent;color:#6B5B45;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;transition:all 0.3s;}
 .tab-btn.on{border-bottom-color:var(--c,#D4A574);color:var(--c,#D4A574);}
 .grind-track{height:6px;background:#1E150E;border-radius:3px;overflow:hidden;margin-top:6px;}
 .grind-fill{height:100%;border-radius:3px;transition:width 0.7s ease,background 0.5s;}
@@ -39,6 +39,16 @@ var h = R.createElement;
 var useState = R.useState;
 var useEffect = R.useEffect;
 var useRef = R.useRef;
+
+// ── HELPERS ─────────────────────────────────────────────
+var LOG_KEY = "ritual_log";
+
+function loadLog() {
+  try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch(e) { return []; }
+}
+function saveLog(log) {
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(log)); } catch(e) {}
+}
 
 // ── DATA ────────────────────────────────────────────────
 var ROASTS = [
@@ -95,6 +105,7 @@ function BrewTab(props) {
   var setRoast = props.setRoast;
   var g = props.g;
   var setG = props.setG;
+  var onComplete = props.onComplete;
   var c = roast.color;
 
   var _timer = useState(0);
@@ -104,6 +115,7 @@ function BrewTab(props) {
   var _done = useState(false);
   var done = _done[0], setDone = _done[1];
   var ivRef = useRef(null);
+  var startTimeRef = useRef(null);
 
   var TOTAL  = 240;
   var water  = g * roast.ratio;
@@ -116,16 +128,40 @@ function BrewTab(props) {
     }
   }
   var cur = phases[curIdx];
+  var isDrip = curIdx === phases.length - 1;
 
-  function doReset() { setRunning(false); setElapsed(0); setDone(false); }
-  function doStart() { if (done) { setElapsed(0); setDone(false); } setRunning(true); }
+  function finishBrew(finalElapsed) {
+    clearInterval(ivRef.current);
+    setRunning(false);
+    setDone(true);
+    setElapsed(TOTAL);
+    if (onComplete) {
+      onComplete({
+        date: new Date().toISOString(),
+        roast: roast.id,
+        roastSk: roast.sk,
+        grams: g,
+        water: g * roast.ratio,
+        ratio: roast.label,
+        time: finalElapsed || TOTAL
+      });
+    }
+  }
+
+  function doReset() { setRunning(false); setElapsed(0); setDone(false); startTimeRef.current = null; }
+  function doStart() {
+    if (done) { setElapsed(0); setDone(false); }
+    if (!startTimeRef.current) startTimeRef.current = Date.now();
+    setRunning(true);
+  }
   function doPause() { setRunning(false); }
+  function doFinish() { finishBrew(elapsed); }
 
   useEffect(function() {
     if (running) {
       ivRef.current = setInterval(function() {
         setElapsed(function(e) {
-          if (e >= TOTAL) { clearInterval(ivRef.current); setRunning(false); setDone(true); return TOTAL; }
+          if (e >= TOTAL) { finishBrew(TOTAL); return TOTAL; }
           return e + 1;
         });
       }, 1000);
@@ -219,7 +255,7 @@ function BrewTab(props) {
         h("div",{style:{height:"100%",width:pct+"%",background:"linear-gradient(90deg,"+c+"88,"+c+")",borderRadius:"2px",transition:"width 0.8s ease"}})
       ),
 
-      // Active phase banner — cumulative values
+      // Active phase banner
       (running && cur) ? h("div",{style:{background:c+"15",border:"1px solid "+c+"33",borderRadius:"10px",
                                           padding:"12px 14px",marginBottom:"12px",display:"flex",alignItems:"center",gap:"10px"}},
         h("div",{style:{fontSize:"20px"}}, cur.icon),
@@ -245,14 +281,18 @@ function BrewTab(props) {
         !running
           ? h("button",{onClick:doStart,style:{flex:1,padding:"14px",background:c,border:"none",borderRadius:"10px",color:"#0D0907",fontSize:"15px",fontWeight:"bold",transition:"background 0.5s"}},
               elapsed > 0 && !done ? "Pokra\u010Dova\u0165" : done ? "Znova" : "Za\u010Da\u0165 ritu\u00E1l")
-          : h("button",{onClick:doPause,style:{flex:1,padding:"14px",background:"transparent",border:"1px solid "+c,borderRadius:"10px",color:c,fontSize:"15px",fontWeight:"bold"}},
-              "Pauza"),
+          : (isDrip
+            ? h("button",{onClick:doFinish,style:{flex:1,padding:"14px",background:c,border:"none",borderRadius:"10px",color:"#0D0907",fontSize:"15px",fontWeight:"bold",transition:"background 0.5s"}},
+                "Dokon\u010Di\u0165")
+            : h("button",{onClick:doPause,style:{flex:1,padding:"14px",background:"transparent",border:"1px solid "+c,borderRadius:"10px",color:c,fontSize:"15px",fontWeight:"bold"}},
+                "Pauza")
+          ),
         h("button",{onClick:doReset,style:{padding:"14px 20px",background:"transparent",border:"1px solid #2A1F14",borderRadius:"10px",color:"#6B5B45",fontSize:"15px"}},
           "\u21BA")
       )
     ),
 
-    // Phase list — cumulative values
+    // Phase list
     h(Card, null,
       h(Label, null, "F\u00E1zy liatia"),
       h("div",{style:{fontSize:"10px",color:"#4A3728",marginBottom:"8px",fontStyle:"italic"}},
@@ -306,148 +346,78 @@ function ScanTab(props) {
   var loading=_load[0], setLoading=_load[1];
   var _err  = useState(null);
   var err   = _err[0], setErr   = _err[1];
-  var _hasProxy = useState(null); // null=unknown, true/false
+  var _hasProxy = useState(null);
   var hasProxy = _hasProxy[0], setHasProxy = _hasProxy[1];
   var _key  = useState(localStorage.getItem("bb_apikey")||"");
   var apiKey = _key[0], setApiKey = _key[1];
   var fileRef = useRef(null);
 
-  // Check if proxy is available on mount
   useEffect(function() {
     fetch("/api/scan", {method:"OPTIONS"})
       .then(function(r){ setHasProxy(r.ok || r.status === 200 || r.status === 405); })
       .catch(function(){ setHasProxy(false); });
   }, []);
 
-  function saveKey(k) {
-    setApiKey(k);
-    try { localStorage.setItem("bb_apikey", k); } catch(e){}
-  }
+  function saveKey(k) { setApiKey(k); try { localStorage.setItem("bb_apikey", k); } catch(e){} }
 
   function handleFile(file) {
     if (!file) return;
     var reader = new FileReader();
     reader.onload = function(ev) {
       var url = ev.target.result;
-      var b64 = url.split(",")[1];
-      var mime = file.type || "image/jpeg";
-      setImg({url:url, b64:b64, mime:mime});
-      setResult(null);
-      setErr(null);
+      setImg({url:url, b64:url.split(",")[1], mime:file.type||"image/jpeg"});
+      setResult(null); setErr(null);
     };
     reader.readAsDataURL(file);
   }
 
-  function analyzeViaProxy() {
-    return fetch("/api/scan", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({image:img.b64, mime:img.mime})
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(data) {
-      if (data.error) throw new Error(data.error);
-      return data;
-    });
-  }
-
-  function analyzeViaDirectAPI() {
-    if (!apiKey || apiKey.length < 20) throw new Error("Zadaj platn\u00FD Anthropic API k\u013E\u00FA\u010D.");
-    return fetch("https://api.anthropic.com/v1/messages", {
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "x-api-key": apiKey,
-        "anthropic-version":"2023-06-01",
-        "anthropic-dangerous-direct-browser-access":"true"
-      },
-      body: JSON.stringify({
-        model:"claude-sonnet-4-6",
-        max_tokens:600,
-        messages:[{role:"user",content:[
-          {type:"image",source:{type:"base64",media_type:img.mime,data:img.b64}},
-          {type:"text",text:'You are a specialty coffee expert. Analyze this photo (beans, grounds, or brewed cup). Respond ONLY with a raw JSON object, no markdown fences:\n{"roast":"light"|"medium"|"dark","confidence":0-100,"reasoning":"1-2 sentences in Slovak","grindSetting":"X.X \u2013 X.X (Fellow Ode 2 scale 1-11)","ratio":"1:15"|"1:16"|"1:17","coffeeG":number,"notes":"short brewing tip in Slovak"}'}
-        ]}]
-      })
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(data) {
-      if (data.error) throw new Error(data.error.message || "API error");
-      var block = (data.content||[]).find(function(b){return b.type==="text";});
-      if (!block) throw new Error("Žiadna odpoveď od AI.");
-      var clean = block.text.replace(/```json|```/g,"").trim();
-      return JSON.parse(clean);
-    });
-  }
-
   function analyze() {
     if (!img) return;
-    setLoading(true);
-    setErr(null);
-
+    setLoading(true); setErr(null);
     var promise;
     if (hasProxy) {
-      promise = analyzeViaProxy();
+      promise = fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({image:img.b64,mime:img.mime})})
+        .then(function(r){return r.json();}).then(function(d){if(d.error)throw new Error(d.error);return d;});
     } else {
-      if (!apiKey || apiKey.length < 20) {
-        setErr("Zadaj platn\u00FD Anthropic API k\u013E\u00FA\u010D.");
-        setLoading(false);
-        return;
-      }
-      promise = analyzeViaDirectAPI();
-    }
-
-    promise
-      .then(function(parsed) {
-        setResult(parsed);
-        setLoading(false);
-      })
-      .catch(function(ex) {
-        setErr("Chyba: " + ex.message);
-        setLoading(false);
+      if(!apiKey||apiKey.length<20){setErr("Zadaj platn\u00FD Anthropic API k\u013E\u00FA\u010D.");setLoading(false);return;}
+      promise = fetch("https://api.anthropic.com/v1/messages",{method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:600,
+          messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:img.mime,data:img.b64}},
+            {type:"text",text:'You are a specialty coffee expert. Analyze this photo. Respond ONLY with raw JSON, no markdown:\n{"roast":"light"|"medium"|"dark","confidence":0-100,"reasoning":"1-2 sentences in Slovak","grindSetting":"X.X \u2013 X.X (Fellow Ode 2 scale 1-11)","ratio":"1:15"|"1:16"|"1:17","coffeeG":number,"notes":"short brewing tip in Slovak"}'}]}]})
+      }).then(function(r){return r.json();}).then(function(d){
+        if(d.error)throw new Error(d.error.message||"API error");
+        var b=(d.content||[]).find(function(x){return x.type==="text";});
+        if(!b)throw new Error("Žiadna odpoveď.");
+        return JSON.parse(b.text.replace(/```json|```/g,"").trim());
       });
+    }
+    promise.then(function(p){setResult(p);setLoading(false);}).catch(function(e){setErr("Chyba: "+e.message);setLoading(false);});
   }
 
   var rc = result ? ((ROASTS.find(function(r){return r.id===result.roast;})||ROASTS[1]).color) : accent;
 
   return h("div",{style:{padding:"0 16px"}},
-
-    // Only show API key input if no proxy available
     hasProxy === false ? h(Card, null,
       h(Label, null, "Anthropic API k\u013E\u00FA\u010D"),
-      h("input",{
-        type:"password",
-        placeholder:"sk-ant-...",
-        value:apiKey,
-        onChange:function(ev){saveKey(ev.target.value);},
-        style:{width:"100%",background:"#0D0907",border:"1px solid #2A1F14",borderRadius:"8px",
-               padding:"10px 12px",color:"#F5E6C8",fontSize:"13px",fontFamily:"monospace",outline:"none"}
-      }),
-      h("div",{style:{fontSize:"10px",color:"#4A3728",marginTop:"6px"}},
-        "K\u013E\u00FA\u010D sa ulo\u017E\u00ED len lok\u00E1lne v prehliada\u010Di. Z\u00EDska\u0161 ho na console.anthropic.com")
+      h("input",{type:"password",placeholder:"sk-ant-...",value:apiKey,onChange:function(ev){saveKey(ev.target.value);},
+        style:{width:"100%",background:"#0D0907",border:"1px solid #2A1F14",borderRadius:"8px",padding:"10px 12px",color:"#F5E6C8",fontSize:"13px",fontFamily:"monospace",outline:"none"}}),
+      h("div",{style:{fontSize:"10px",color:"#4A3728",marginTop:"6px"}},"K\u013E\u00FA\u010D sa ulo\u017E\u00ED len lok\u00E1lne. Z\u00EDska\u0161 ho na console.anthropic.com")
     ) : null,
 
-    // Photo area
-    h("div",{
-      onClick:function(){if(fileRef.current)fileRef.current.click();},
-      style:{border:"2px dashed "+(img?"transparent":accent+"44"),borderRadius:"16px",
-             background:img?"transparent":"#14100C",overflow:"hidden",marginBottom:"14px",
-             cursor:"pointer",minHeight:"170px",display:"flex",alignItems:"center",justifyContent:"center"}
-    },
-      img
-        ? h("img",{src:img.url,style:{width:"100%",maxHeight:"270px",objectFit:"cover",borderRadius:"14px",display:"block"}})
+    h("div",{onClick:function(){if(fileRef.current)fileRef.current.click();},
+      style:{border:"2px dashed "+(img?"transparent":accent+"44"),borderRadius:"16px",background:img?"transparent":"#14100C",overflow:"hidden",marginBottom:"14px",cursor:"pointer",minHeight:"170px",display:"flex",alignItems:"center",justifyContent:"center"}},
+      img ? h("img",{src:img.url,style:{width:"100%",maxHeight:"270px",objectFit:"cover",borderRadius:"14px",display:"block"}})
         : h("div",{style:{textAlign:"center",padding:"28px 20px"}},
             h("div",{style:{fontSize:"38px",marginBottom:"10px"}},"\u2615"),
             h("div",{style:{color:accent,fontSize:"14px",fontWeight:"bold",marginBottom:"3px"}},"Odfoti\u0165 k\u00E1vu"),
-            h("div",{style:{color:"#6B5B45",fontSize:"11px"}},"Zrn\u00E1, mlet\u00E1 k\u00E1va alebo \u0161\u00E1lka")
-          )
+            h("div",{style:{color:"#6B5B45",fontSize:"11px"}},"Zrn\u00E1, mlet\u00E1 k\u00E1va alebo \u0161\u00E1lka"))
     ),
-    h("input",{ref:fileRef,type:"file",accept:"image/*",capture:"environment",
-               style:{display:"none"},onChange:function(ev){handleFile(ev.target.files[0]);}}),
+    h("input",{ref:fileRef,type:"file",accept:"image/*",capture:"environment",style:{display:"none"},onChange:function(ev){handleFile(ev.target.files[0]);}}),
 
-    !result && h("button",{
-      className: loading ? "scan-btn blinking" : "scan-btn",
-      onClick: img ? analyze : function(){if(fileRef.current)fileRef.current.click();},
+    !result && h("button",{className:loading?"scan-btn blinking":"scan-btn",
+      onClick:img?analyze:function(){if(fileRef.current)fileRef.current.click();},
       style:{width:"100%",padding:"14px",borderRadius:"10px",fontSize:"14px",fontWeight:"bold",fontFamily:"inherit",
              background:img?accent:accent+"33",color:img?"#0D0907":accent,border:"none",marginBottom:"14px"}
     }, loading ? "Analyzujem..." : img ? "Analyzova\u0165" : "Vyber fotku"),
@@ -458,39 +428,160 @@ function ScanTab(props) {
       h(Card,{style:{border:"1px solid "+rc+"44"}},
         h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}},
           h("div",{style:{fontSize:"9px",letterSpacing:"2px",color:"#8B7355",textTransform:"uppercase"}},"AI Anal\u00FDza"),
-          h("div",{style:{background:rc+"22",border:"1px solid "+rc+"44",borderRadius:"20px",padding:"3px 10px",fontSize:"11px",color:rc}},
-            result.confidence+"% istota")
+          h("div",{style:{background:rc+"22",border:"1px solid "+rc+"44",borderRadius:"20px",padding:"3px 10px",fontSize:"11px",color:rc}}, result.confidence+"% istota")
         ),
-        h("div",{style:{fontSize:"22px",color:rc,fontWeight:"bold",textTransform:"capitalize",marginBottom:"12px"}},
-          result.roast === "light" ? "Svetl\u00E1" : result.roast === "medium" ? "Stredn\u00E1" : "Tmav\u00E1"),
+        h("div",{style:{fontSize:"22px",color:rc,fontWeight:"bold",marginBottom:"12px"}},
+          result.roast==="light"?"Svetl\u00E1":result.roast==="medium"?"Stredn\u00E1":"Tmav\u00E1"),
         h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"8px",marginBottom:"12px"}},
           [["Pomer",result.ratio||"\u2013"],["Ode 2",(result.grindSetting||"\u2013").split("\u2013")[0].trim()+"\u2026"],["K\u00E1va",(result.coffeeG||30)+"g"]].map(function(row){
             return h("div",{key:row[0],style:{background:rc+"10",borderRadius:"8px",padding:"10px",textAlign:"center"}},
               h("div",{style:{fontSize:"9px",color:"#6B5B45",marginBottom:"3px",textTransform:"uppercase",letterSpacing:"1px"}},row[0]),
-              h("div",{style:{fontSize:"14px",color:"#F5E6C8",fontWeight:"bold"}},row[1])
-            );
+              h("div",{style:{fontSize:"14px",color:"#F5E6C8",fontWeight:"bold"}},row[1]));
           })
         ),
         h("div",{style:{background:"#0D0907",borderRadius:"8px",padding:"12px",marginBottom:"10px"}},
           h("div",{style:{fontSize:"10px",color:"#8B7355",marginBottom:"4px"}},"\u010Co vid\u00EDm"),
-          h("div",{style:{fontSize:"12px",color:"#C4A882",lineHeight:1.5}}, result.reasoning)
-        ),
+          h("div",{style:{fontSize:"12px",color:"#C4A882",lineHeight:1.5}}, result.reasoning)),
         result.notes && h("div",{style:{background:rc+"10",borderRadius:"8px",padding:"12px",marginBottom:"14px"}},
           h("div",{style:{fontSize:"10px",color:"#8B7355",marginBottom:"4px"}},"Tip"),
-          h("div",{style:{fontSize:"12px",color:"#C4A882",lineHeight:1.5}}, result.notes)
-        ),
-        h("button",{
-          onClick:function(){onApply(result);},
-          style:{width:"100%",padding:"14px",background:rc,border:"none",borderRadius:"10px",
-                 color:"#0D0907",fontSize:"14px",fontWeight:"bold",fontFamily:"inherit"}
-        }, "Pou\u017Ei\u0165 a vari\u0165")
+          h("div",{style:{fontSize:"12px",color:"#C4A882",lineHeight:1.5}}, result.notes)),
+        h("button",{onClick:function(){onApply(result);},
+          style:{width:"100%",padding:"14px",background:rc,border:"none",borderRadius:"10px",color:"#0D0907",fontSize:"14px",fontWeight:"bold",fontFamily:"inherit"}},
+          "Pou\u017Ei\u0165 a vari\u0165")
       ),
-      h("button",{
-        onClick:function(){setImg(null);setResult(null);},
-        style:{width:"100%",padding:"12px",background:"transparent",border:"1px solid #2A1F14",
-               borderRadius:"10px",color:"#6B5B45",fontSize:"13px",fontFamily:"inherit",marginBottom:"8px"}
-      }, "In\u00E1 fotka")
+      h("button",{onClick:function(){setImg(null);setResult(null);},
+        style:{width:"100%",padding:"12px",background:"transparent",border:"1px solid #2A1F14",borderRadius:"10px",color:"#6B5B45",fontSize:"13px",fontFamily:"inherit",marginBottom:"8px"}},
+        "In\u00E1 fotka")
     )
+  );
+}
+
+// ── LOG TAB ──────────────────────────────────────────────
+function LogTab(props) {
+  var accent = props.accent;
+  var _log = useState(loadLog());
+  var log = _log[0], setLog = _log[1];
+
+  function deleteEntry(idx) {
+    var next = log.filter(function(_,i){return i!==idx;});
+    setLog(next);
+    saveLog(next);
+  }
+
+  function clearAll() {
+    setLog([]);
+    saveLog([]);
+  }
+
+  // Stats
+  var total = log.length;
+  var roastCounts = {};
+  var totalGrams = 0;
+  log.forEach(function(e) {
+    roastCounts[e.roastSk] = (roastCounts[e.roastSk]||0) + 1;
+    totalGrams += e.grams;
+  });
+  var topRoast = "";
+  var topCount = 0;
+  Object.keys(roastCounts).forEach(function(k) {
+    if (roastCounts[k] > topCount) { topRoast = k; topCount = roastCounts[k]; }
+  });
+
+  // Group by date
+  var groups = {};
+  log.forEach(function(e, i) {
+    var d = new Date(e.date);
+    var key = d.getFullYear()+"-"+(d.getMonth()+1<10?"0":"")+(d.getMonth()+1)+"-"+(d.getDate()<10?"0":"")+d.getDate();
+    if (!groups[key]) groups[key] = [];
+    groups[key].push({entry:e, idx:i});
+  });
+  var sortedDays = Object.keys(groups).sort().reverse();
+
+  function fmtDate(iso) {
+    var d = new Date(iso);
+    var days = ["Ne","Po","Ut","St","\u0160t","Pi","So"];
+    return days[d.getDay()]+" "+d.getDate()+"."+(d.getMonth()+1)+". "+d.getHours()+":"+(d.getMinutes()<10?"0":"")+d.getMinutes();
+  }
+
+  function fmtDayHeader(key) {
+    var parts = key.split("-");
+    var d = new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
+    var today = new Date(); today.setHours(0,0,0,0);
+    var diff = Math.round((today - d) / 86400000);
+    if (diff === 0) return "Dnes";
+    if (diff === 1) return "V\u010Dera";
+    var days = ["Nede\u013Ea","Pondelok","Utorok","Streda","\u0160tvrtok","Piatok","Sobota"];
+    return days[d.getDay()]+" "+d.getDate()+"."+(d.getMonth()+1)+".";
+  }
+
+  function roastColor(id) {
+    var r = ROASTS.find(function(x){return x.id===id;});
+    return r ? r.color : accent;
+  }
+
+  if (total === 0) {
+    return h("div",{style:{padding:"0 16px"}},
+      h(Card,{style:{textAlign:"center",padding:"40px 20px"}},
+        h("div",{style:{fontSize:"32px",marginBottom:"12px"}},"\u2615"),
+        h("div",{style:{fontSize:"14px",color:"#8B7355",marginBottom:"6px"}},"Zatia\u013E \u017Eiadne varenia"),
+        h("div",{style:{fontSize:"11px",color:"#4A3728"}},"Ke\u010F dokon\u010D\u00ED\u0161 prv\u00FD ritu\u00E1l, objev\u00ED sa tu.")
+      )
+    );
+  }
+
+  return h("div",{style:{padding:"0 16px"}},
+
+    // Stats summary
+    h(Card, null,
+      h(Label, null, "Preh\u013Ead"),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"8px"}},
+        [["Varení", total],["Priemer", total>0?Math.round(totalGrams/total)+"g":"\u2013"],["Naj\u010Dastej\u0161ie", topRoast||"\u2013"]].map(function(row){
+          return h("div",{key:row[0],style:{background:accent+"10",borderRadius:"8px",padding:"10px",textAlign:"center"}},
+            h("div",{style:{fontSize:"9px",color:"#6B5B45",marginBottom:"3px",textTransform:"uppercase",letterSpacing:"1px"}},row[0]),
+            h("div",{style:{fontSize:"14px",color:"#F5E6C8",fontWeight:"bold"}},row[1])
+          );
+        })
+      )
+    ),
+
+    // Brew entries grouped by day
+    sortedDays.map(function(day) {
+      return h("div",{key:day,style:{marginBottom:"14px"}},
+        h("div",{style:{fontSize:"10px",color:"#6B5B45",letterSpacing:"1px",textTransform:"uppercase",marginBottom:"8px",paddingLeft:"4px"}},
+          fmtDayHeader(day)),
+        groups[day].map(function(item) {
+          var e = item.entry;
+          var rc = roastColor(e.roast);
+          return h(Card,{key:item.idx,style:{marginBottom:"8px"}},
+            h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}},
+              h("div",{style:{display:"flex",alignItems:"center",gap:"8px"}},
+                h("div",{style:{width:"8px",height:"8px",borderRadius:"50%",background:rc}}),
+                h("div",{style:{fontSize:"13px",color:rc,fontWeight:"bold"}}, e.roastSk)
+              ),
+              h("div",{style:{display:"flex",alignItems:"center",gap:"8px"}},
+                h("div",{style:{fontSize:"10px",color:"#4A3728"}}, fmtDate(e.date)),
+                h("button",{onClick:function(){deleteEntry(item.idx);},
+                  style:{background:"transparent",border:"none",color:"#2A1F14",fontSize:"12px",padding:"2px 6px"}},"\u00D7")
+              )
+            ),
+            h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"6px",textAlign:"center"}},
+              [["K\u00E1va",e.grams+"g"],["Voda",e.water+"ml"],["Pomer",e.ratio],["\u010Cas",fmtTime(e.time)]].map(function(row){
+                return h("div",{key:row[0],style:{background:"#0D0907",borderRadius:"6px",padding:"8px 4px"}},
+                  h("div",{style:{fontSize:"8px",color:"#4A3728",marginBottom:"2px",textTransform:"uppercase",letterSpacing:"0.5px"}},row[0]),
+                  h("div",{style:{fontSize:"13px",color:"#C4A882",fontWeight:"bold"}},row[1])
+                );
+              })
+            )
+          );
+        })
+      );
+    }),
+
+    // Clear all
+    total > 1 ? h("button",{onClick:clearAll,
+      style:{width:"100%",padding:"12px",background:"transparent",border:"1px solid #1E150E",borderRadius:"10px",
+             color:"#2A1F14",fontSize:"11px",fontFamily:"inherit",marginTop:"8px",marginBottom:"16px"}},
+      "Vymaza\u0165 hist\u00F3riu") : null
   );
 }
 
@@ -502,6 +593,8 @@ function App() {
   var roast = _roast[0], setRoast = _roast[1];
   var _g    = useState(30);
   var g     = _g[0], setG = _g[1];
+  var _logVersion = useState(0);
+  var logVersion = _logVersion[0], setLogVersion = _logVersion[1];
   var c     = roast.color;
 
   function applyAI(result) {
@@ -510,6 +603,13 @@ function App() {
     var cg = parseInt(result.coffeeG, 10);
     if (cg >= 10 && cg <= 200) setG(cg);
     setTab("brew");
+  }
+
+  function onBrewComplete(entry) {
+    var log = loadLog();
+    log.push(entry);
+    saveLog(log);
+    setLogVersion(function(v){return v+1;});
   }
 
   return h("div",{style:{width:"100%",maxWidth:"460px",position:"relative"}},
@@ -531,17 +631,22 @@ function App() {
           "Ka\u017Ed\u00E1 \u0161\u00E1lka je anal\u00F3gov\u00FD akt")
       ),
 
+      // Tab bar — 3 tabs
       h("div",{style:{display:"flex",borderBottom:"1px solid #1E150E",marginBottom:"20px",
                       position:"sticky",top:0,background:"#0D0907",zIndex:10,padding:"0 16px"}},
         h("button",{className:"tab-btn "+(tab==="brew"?"on":""),style:{"--c":c},onClick:function(){setTab("brew");}},
           "Varenie"),
         h("button",{className:"tab-btn "+(tab==="scan"?"on":""),style:{"--c":c},onClick:function(){setTab("scan");}},
-          "AI Rozpoznanie")
+          "AI Scan"),
+        h("button",{className:"tab-btn "+(tab==="log"?"on":""),style:{"--c":c},onClick:function(){setTab("log");}},
+          "Denn\u00EDk")
       ),
 
       tab === "brew"
-        ? h(BrewTab, {roast:roast, setRoast:setRoast, g:g, setG:setG})
-        : h(ScanTab, {onApply:applyAI, accent:c})
+        ? h(BrewTab, {roast:roast, setRoast:setRoast, g:g, setG:setG, onComplete:onBrewComplete})
+        : tab === "scan"
+          ? h(ScanTab, {onApply:applyAI, accent:c})
+          : h(LogTab, {accent:c, key:logVersion})
     )
   );
 }
