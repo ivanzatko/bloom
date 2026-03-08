@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/scan.js": {
-      "runtime": "@vercel/node@3"
+      "runtime": "@vercel/node@3.2.28"
     }
   }
 }
