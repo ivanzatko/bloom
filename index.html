@@ -86,7 +86,7 @@ function SplashScreen(props){
   useEffect(function(){setTimeout(function(){setVis(true);},100);},[]);
   return h("div",{style:{position:"fixed",inset:0,background:C.bg,display:"flex",flexDirection:"column",overflow:"hidden"}},
     h("div",{style:{flex:1,position:"relative",overflow:"hidden"}},
-      h("img",{src:"https://images.unsplash.com/photo-1544787219-7f47ccb76571?w=800&q=80&auto=format&fit=crop",alt:"",
+      h("img",{src:"https://images.unsplash.com/photo-1518057111178-44a106bad636?w=800&q=80&auto=format&fit=crop",alt:"",
         style:{width:"100%",height:"100%",objectFit:"cover",opacity:vis?0.55:0,transition:"opacity 1.2s ease",filter:"saturate(0.7)"}}),
       h("div",{style:{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(15,13,11,0.2) 0%,rgba(15,13,11,0) 40%,rgba(15,13,11,0.95) 100%)"}})
     ),
