@@ -1,6 +1,6 @@
 // Vercel serverless function — proxies coffee scan to Anthropic API
 
-const PROMPT = 'You are a specialty coffee expert. Analyze this photo (beans, grounds, or brewed cup). Respond ONLY with a raw JSON object, no markdown fences:\n{"roast":"light"|"medium"|"dark","confidence":0-100,"reasoning":"1-2 sentences in Slovak","grindSetting":"X.X – X.X (Fellow Ode 2 scale 1-11)","ratio":"1:15"|"1:16"|"1:17","coffeeG":number,"notes":"short brewing tip in Slovak"}';
+const PROMPT = 'You are a specialty coffee expert. Analyze this photo (beans, grounds, brewed cup, or packaging/label). If you can see a label or packaging, identify the coffee name and roaster. Respond ONLY with a raw JSON object, no markdown fences:\n{"roast":"light"|"medium"|"dark","ratio":15|16|17,"grind":3.5,"grams":18,"coffeeName":"coffee name if visible on label","coffeeRoaster":"roaster name if visible on label","note":"short brewing tip in Slovak (1-2 sentences)"}';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 

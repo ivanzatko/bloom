@@ -52,8 +52,20 @@ var C={bg:"#0f0d0b",surface:"#1a1612",card:"#201c18",border:"#2e2820",gold:"#c9a
        text:"#e8ddd0",textMid:"#a09080",textDim:"#6a5f52"};
 
 var LOG_KEY="bloom_log";
+var COFFEES_KEY="bloom_coffees";
 function loadLog(){try{return JSON.parse(localStorage.getItem(LOG_KEY))||[];}catch(e){return[];}}
 function saveLog(l){try{localStorage.setItem(LOG_KEY,JSON.stringify(l));}catch(e){}}
+function loadCoffees(){try{return JSON.parse(localStorage.getItem(COFFEES_KEY))||[];}catch(e){return[];}}
+function saveCoffees(c){try{localStorage.setItem(COFFEES_KEY,JSON.stringify(c));}catch(e){}}
+function saveCoffee(coffee){
+  var list=loadCoffees();
+  var existing=list.findIndex(function(c){return c.name===coffee.name&&c.roaster===coffee.roaster;});
+  if(existing>=0){list[existing].lastUsed=new Date().toISOString();list[existing].roast=coffee.roast;}
+  else{list.push({id:Date.now().toString(),name:coffee.name,roaster:coffee.roaster,roast:coffee.roast,lastUsed:new Date().toISOString()});}
+  list.sort(function(a,b){return new Date(b.lastUsed)-new Date(a.lastUsed);});
+  saveCoffees(list);
+  return list;
+}
 
 var pf="'Playfair Display',Georgia,serif";
 var mono="'Courier New',monospace";
@@ -74,12 +86,11 @@ function SplashScreen(props){
   useEffect(function(){setTimeout(function(){setVis(true);},100);},[]);
   return h("div",{style:{position:"fixed",inset:0,background:C.bg,display:"flex",flexDirection:"column",overflow:"hidden"}},
     h("div",{style:{flex:1,position:"relative",overflow:"hidden"}},
-      h("img",{src:"https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80&auto=format&fit=crop",alt:"",
+      h("img",{src:"https://images.unsplash.com/photo-1544787219-7f47ccb76571?w=800&q=80&auto=format&fit=crop",alt:"",
         style:{width:"100%",height:"100%",objectFit:"cover",opacity:vis?0.55:0,transition:"opacity 1.2s ease",filter:"saturate(0.7)"}}),
       h("div",{style:{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(15,13,11,0.2) 0%,rgba(15,13,11,0) 40%,rgba(15,13,11,0.95) 100%)"}})
     ),
     h("div",{style:{padding:"32px 32px 52px",opacity:vis?1:0,transform:vis?"none":"translateY(16px)",transition:"all 1s ease 0.4s"}},
-      h("div",{style:{fontSize:11,letterSpacing:"0.22em",textTransform:"uppercase",color:C.goldDim,marginBottom:14,fontFamily:mono}},"Pour over \u00B7 Fellow Ode Gen 2"),
       h("h1",{style:{fontFamily:pf,fontSize:52,fontWeight:700,color:C.text,lineHeight:1,marginBottom:16,letterSpacing:"-0.02em"}},"Bloom"),
       h("p",{style:{fontSize:18,color:C.textMid,lineHeight:1.5,marginBottom:10,fontFamily:pf}},"When coffee wakes up."),
       h("p",{style:{fontSize:13,color:C.textDim,lineHeight:1.6,marginBottom:40,fontStyle:"italic",fontFamily:pf}},"Odfot kávu. Nastavíme pomer.",h("br"),"Ty len naleješ."),
@@ -106,7 +117,9 @@ function GrindBar(props){
 // ── BREW TAB ────────────────────────────────────────────
 function BrewTab(props){
   var onComplete=props.onComplete;
-  var _ri=useState(1),roastIdx=_ri[0],setRoastIdx=_ri[1];
+  var roast=props.roast;
+  var coffee=props.coffee;
+  var _cups=useState(2),cups=_cups[0],setCups=_cups[1];
   var _g=useState(18),grams=_g[0],setGrams=_g[1];
   var _p=useState(-1),phase=_p[0],setPhase=_p[1];
   var _tl=useState(0),timeLeft=_tl[0],setTimeLeft=_tl[1];
@@ -114,9 +127,11 @@ function BrewTab(props){
   var _ot=useState(false),isOvertime=_ot[0],setIsOvertime=_ot[1];
   var _os=useState(0),overSec=_os[0],setOverSec=_os[1];
   var _da=useState(0),doneActual=_da[0],setDoneActual=_da[1];
-  var roast=ROASTS[roastIdx];
   var water=grams*roast.ratio;
   var tt=totalTime();
+
+  // Sync grams when cups change
+  useEffect(function(){setGrams(cups*9);},[cups]);
 
   function cumWater(pi){return Math.round(PHASES.slice(0,pi+1).reduce(function(s,p){return s+p.waterFraction*water;},0));}
   function addWater(pi){return Math.round(PHASES[pi].waterFraction*water);}
@@ -133,7 +148,9 @@ function BrewTab(props){
     setDoneActual(el);
     setPhase(PHASES.length);
     if(onComplete){
-      onComplete({date:new Date().toISOString(),roast:roast.id,roastSk:roast.label,grams:grams,water:water,ratio:"1:"+roast.ratio,time:el,planned:tt});
+      var entry={date:new Date().toISOString(),roast:roast.id,roastSk:roast.label,grams:grams,water:water,ratio:"1:"+roast.ratio,time:el,planned:tt};
+      if(coffee&&coffee.name){entry.coffeeName=coffee.name;entry.coffeeRoaster=coffee.roaster||"";}
+      onComplete(entry);
     }
   }
 
@@ -158,42 +175,54 @@ function BrewTab(props){
   var done=phase===PHASES.length;
   var isDrip=phase===PHASES.length-1;
 
+  // ── Done screen — fullscreen with photo background ──
+  if(done){
+    var diff=doneActual-tt;
+    var fb;
+    if(diff<=-10)fb={c:C.gold,t:"Rýchle kvapkanie. Skús jemnejšie mletie pre plnšiu chuť."};
+    else if(diff<=15)fb={c:C.gold,t:"Presné načasovanie — káva by mala byť výborne extrahovaná."};
+    else if(diff<=45)fb={c:C.textMid,t:"Mierne dlhšie kvapkanie (+"+diff+"s). Ak chutí horkasto, skús o pol stupňa hrubšie."};
+    else fb={c:"#c06050",t:"Kvapkanie trvalo +"+diff+"s navyše. Nastav mlynček hrubšie — aspoň o stupeň."};
+    return h("div",{style:{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}},
+      h("img",{src:"https://images.unsplash.com/photo-1442512595331-e89e73853f31?w=800&q=80&auto=format&fit=crop",alt:"",
+        style:{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"saturate(0.6) brightness(0.7)"}}),
+      h("div",{style:{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(15,13,11,0.3) 0%,rgba(15,13,11,0.85) 60%,rgba(15,13,11,0.97) 100%)"}}),
+      h("div",{style:{position:"relative",zIndex:1,padding:"32px 32px 52px",textAlign:"center"}},
+        h("div",{style:{fontFamily:pf,fontSize:36,color:C.text,marginBottom:28,fontWeight:700}},"Dobrú chuť."),
+        h("div",{style:{display:"flex",justifyContent:"center",gap:32,marginBottom:24}},
+          h("div",null,h("div",{style:{fontSize:10,color:C.textDim,marginBottom:4,fontFamily:mono,textTransform:"uppercase",letterSpacing:"1px"}},"Reálny čas"),
+            h("div",{style:{fontSize:28,color:C.gold,fontWeight:700,fontFamily:mono}},fmtTime(doneActual))),
+          h("div",null,h("div",{style:{fontSize:10,color:C.textDim,marginBottom:4,fontFamily:mono,textTransform:"uppercase",letterSpacing:"1px"}},"Plán"),
+            h("div",{style:{fontSize:28,color:C.textDim,fontWeight:700,fontFamily:mono}},fmtTime(tt)))),
+        h("div",{style:{fontSize:14,color:fb.c,lineHeight:1.6,marginBottom:32,fontStyle:"italic",padding:"0 12px"}},fb.t),
+        h("button",{onClick:function(){setPhase(-1);setIsOvertime(false);setOverSec(0);},
+          style:{width:"100%",padding:16,border:"none",borderRadius:12,background:C.gold,color:C.bg,fontSize:16,fontWeight:700,fontFamily:pf}},"Ďalšia šálka")
+      )
+    );
+  }
+
   return h("div",{style:{paddingBottom:20}},
-    // Roast
+    // Cups selector
     h(Card,null,
-      h(Lbl,null,"Praženosť"),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}},
-        ROASTS.map(function(r,i){
-          return h("button",{key:r.id,onClick:function(){setRoastIdx(i);setPhase(-1);},
-            style:{padding:"12px 6px",border:"1px solid "+(roastIdx===i?C.gold:C.border),borderRadius:10,
-              background:roastIdx===i?"rgba(201,169,110,0.1)":"transparent",color:roastIdx===i?C.gold:C.textMid,textAlign:"center",transition:"all 0.15s"}},
-            h("div",{style:{fontFamily:pf,fontSize:13,fontWeight:600}},r.label),
-            h("div",{style:{fontSize:10,opacity:0.6,marginTop:2,fontFamily:mono}},r.sub));
+      h(Lbl,null,"Počet šálok"),
+      h("div",{style:{display:"flex",gap:8,marginBottom:16}},
+        [1,2,3,4,5].map(function(n){
+          return h("button",{key:n,onClick:function(){setCups(n);},
+            style:{flex:1,padding:"14px 4px",border:"1px solid "+(cups===n?C.gold:C.border),borderRadius:10,
+              background:cups===n?"rgba(201,169,110,0.1)":"transparent",color:cups===n?C.gold:C.textMid,textAlign:"center",transition:"all 0.15s"}},
+            h("div",{style:{fontFamily:pf,fontSize:20,fontWeight:700}},n),
+            h("div",{style:{fontSize:9,opacity:0.6,marginTop:2,fontFamily:mono}},n*9+"g"));
         })),
-      h("div",{style:{fontSize:12,color:C.textDim,fontStyle:"italic"}},roast.note)),
-
-    // Grind
-    h(Card,null,
-      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}},
-        h(Lbl,null,"Mletie \u00B7 Fellow Ode 2"),
-        h("span",{style:{fontFamily:mono,fontSize:16,color:C.gold,fontWeight:700}},roast.grind.min+" – "+roast.grind.max)),
-      h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:10,color:C.textDim,marginBottom:2}},
-        h("span",null,"1 — Jemne"),h("span",null,"11 — Hrubo")),
-      h(GrindBar,{roast:roast}),
-      h("div",{style:{fontSize:12,color:C.textDim,fontStyle:"italic",marginTop:4}},roast.grind.tip)),
-
-    // Grams
-    h(Card,null,
-      h(Lbl,null,"Množstvo kávy"),
+      // Grams fine-tune
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:20,marginBottom:16}},
-        h("button",{onClick:function(){setGrams(function(g){return Math.max(10,g-1);});},
-          style:{width:40,height:40,border:"1px solid "+C.border,borderRadius:"50%",background:"none",color:C.textMid,fontSize:20,display:"flex",alignItems:"center",justifyContent:"center"}},"\u2212"),
+        h("button",{onClick:function(){setGrams(function(g){return Math.max(9,g-1);});},
+          style:{width:36,height:36,border:"1px solid "+C.border,borderRadius:"50%",background:"none",color:C.textMid,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}},"\u2212"),
         h("div",{style:{textAlign:"center"}},
-          h("span",{style:{fontFamily:pf,fontSize:44,fontWeight:700,color:C.text}},grams),
-          h("span",{style:{color:C.textDim,fontSize:14,marginLeft:6}},"g")),
-        h("button",{onClick:function(){setGrams(function(g){return Math.min(40,g+1);});},
-          style:{width:40,height:40,border:"1px solid "+C.border,borderRadius:"50%",background:"none",color:C.textMid,fontSize:20,display:"flex",alignItems:"center",justifyContent:"center"}},"+")
-      ),
+          h("span",{style:{fontFamily:pf,fontSize:36,fontWeight:700,color:C.text}},grams),
+          h("span",{style:{color:C.textDim,fontSize:13,marginLeft:6}},"g")),
+        h("button",{onClick:function(){setGrams(function(g){return Math.min(45,g+1);});},
+          style:{width:36,height:36,border:"1px solid "+C.border,borderRadius:"50%",background:"none",color:C.textMid,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}},"+")),
+      // Recipe summary
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:0}},
         [{l:"Káva",v:grams+"g"},{l:"Voda",v:water+"ml"},{l:"Pomer",v:"1:"+roast.ratio},{l:"Čas",v:fmtTime(tt)}].map(function(item,i){
           return h("div",{key:i,style:{textAlign:"center",padding:"10px 4px",borderTop:"1px solid "+C.border}},
@@ -223,30 +252,9 @@ function BrewTab(props){
       // Progress dots
       h("div",{style:{display:"flex",gap:4,marginBottom:20}},
         PHASES.map(function(_,i){return h("div",{key:i,style:{flex:1,height:2,borderRadius:1,background:i<phase?C.gold:i===phase?C.goldDim:C.border,transition:"background 0.3s"}});})),
-      // Button: Dokončiť during drip, Skončiť otherwise
       isDrip?h("button",{onClick:finishBrew,style:{width:"100%",padding:14,border:"none",borderRadius:10,background:C.gold,color:C.bg,fontSize:14,fontWeight:700,fontFamily:pf}},"Dokončiť"):
         h("button",{onClick:function(){clearInterval(ivRef.current);setPhase(-1);setIsOvertime(false);setOverSec(0);},style:{width:"100%",padding:12,border:"1px solid "+C.border,borderRadius:10,background:"none",color:C.textDim,fontSize:13}},"Skončiť")
     ):null,
-
-    // Timer — done
-    done?(function(){
-      var diff=doneActual-tt;
-      var fb;
-      if(diff<=-10)fb={c:C.gold,t:"Rýchle kvapkanie. Skús jemnejšie mletie pre plnšiu chuť."};
-      else if(diff<=15)fb={c:C.gold,t:"Presné načasovanie — káva by mala byť výborne extrahovaná."};
-      else if(diff<=45)fb={c:C.textMid,t:"Mierne dlhšie kvapkanie (+"+diff+"s). Ak chutí horkasto, skús o pol stupňa hrubšie."};
-      else fb={c:"#c06050",t:"Kvapkanie trvalo +"+diff+"s navyše. Nastav mlynček hrubšie — aspoň o stupeň."};
-      return h(Card,{style:{textAlign:"center",padding:"40px 20px"}},
-        h("div",{style:{fontFamily:pf,fontSize:26,color:C.text,marginBottom:16}},"Dobrú chuť."),
-        h("div",{style:{display:"flex",justifyContent:"center",gap:24,marginBottom:16}},
-          h("div",null,h("div",{style:{fontSize:10,color:C.textDim,marginBottom:4,fontFamily:mono,textTransform:"uppercase",letterSpacing:"1px"}},"Reálny čas"),
-            h("div",{style:{fontSize:22,color:C.gold,fontWeight:700,fontFamily:mono}},fmtTime(doneActual))),
-          h("div",null,h("div",{style:{fontSize:10,color:C.textDim,marginBottom:4,fontFamily:mono,textTransform:"uppercase",letterSpacing:"1px"}},"Plán"),
-            h("div",{style:{fontSize:22,color:C.textDim,fontWeight:700,fontFamily:mono}},fmtTime(tt)))),
-        h("div",{style:{fontSize:13,color:fb.c,lineHeight:1.6,marginBottom:20,fontStyle:"italic",padding:"0 8px"}},fb.t),
-        h("div",{style:{fontSize:14,color:C.textMid,lineHeight:1.6,fontStyle:"italic",marginBottom:28}},"Nechaj šálku chvíľu.",h("br"),"Keď vychladne, chuť sa otvorí."),
-        h("button",{onClick:function(){setPhase(-1);setIsOvertime(false);setOverSec(0);},style:{padding:"12px 28px",border:"1px solid "+C.border,borderRadius:10,background:"none",color:C.textMid,fontSize:13}},"Ďalšia šálka"));
-    })():null,
 
     // Phase reference (when idle)
     phase===-1?h(Card,null,
@@ -268,8 +276,9 @@ function BrewTab(props){
 }
 
 // ── GRIND TAB ───────────────────────────────────────────
-function GrindTab(){
-  var _ri=useState(1),roastIdx=_ri[0],setRoastIdx=_ri[1];
+function GrindTab(props){
+  var roastIdx=props.roastIdx;
+  var setRoastIdx=props.setRoastIdx;
   var roast=ROASTS[roastIdx];
   return h("div",{style:{paddingBottom:20}},
     h(Card,null,
@@ -299,6 +308,7 @@ function GrindTab(){
 // ── SCAN TAB ────────────────────────────────────────────
 function ScanTab(props){
   var onApply=props.onApply;
+  var setSelectedCoffee=props.setSelectedCoffee;
   var _k=useState(function(){try{return localStorage.getItem("bloom_key")||"";}catch(e){return "";}}),apiKey=_k[0],setApiKey=_k[1];
   var _sk=useState(false),showKey=_sk[0],setShowKey=_sk[1];
   var _img=useState(null),image=_img[0],setImage=_img[1];
@@ -307,6 +317,9 @@ function ScanTab(props){
   var _res=useState(null),result=_res[0],setResult=_res[1];
   var _err=useState(null),error=_err[0],setError=_err[1];
   var _hp=useState(null),hasProxy=_hp[0],setHasProxy=_hp[1];
+  var _cn=useState(""),coffeeName=_cn[0],setCoffeeName=_cn[1];
+  var _cr=useState(""),coffeeRoaster=_cr[0],setCoffeeRoaster=_cr[1];
+  var _coffees=useState(loadCoffees),coffees=_coffees[0],setCoffees=_coffees[1];
   var fileRef=useRef(null);
 
   useEffect(function(){
@@ -314,7 +327,7 @@ function ScanTab(props){
   },[]);
 
   function saveKey(k){setApiKey(k);try{localStorage.setItem("bloom_key",k);}catch(e){}}
-  function handleFile(f){if(!f)return;var rd=new FileReader();rd.onload=function(ev){setImage(ev.target.result);setImageBase64(ev.target.result.split(",")[1]);setResult(null);setError(null);};rd.readAsDataURL(f);}
+  function handleFile(f){if(!f)return;var rd=new FileReader();rd.onload=function(ev){setImage(ev.target.result);setImageBase64(ev.target.result.split(",")[1]);setResult(null);setError(null);setCoffeeName("");setCoffeeRoaster("");};rd.readAsDataURL(f);}
 
   function analyze(){
     if(!imageBase64)return;
@@ -329,18 +342,37 @@ function ScanTab(props){
         headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
         body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,
           messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:imageBase64}},
-            {type:"text",text:"Pozri sa na túto fotografiu kávy — môžu to byť zrná, mletá káva, šálka alebo obal.\nOdporuč praženosť (light/medium/dark), pomer vody ku káve (napr. 15 pre 1:15), nastavenie mlynčeka Fellow Ode Gen 2 (číslo 1–11) a množstvo kávy v gramoch.\nOdpovedz výhradne v JSON, bez textu navyše:\n{\"roast\":\"light|medium|dark\",\"ratio\":15,\"grind\":3.5,\"grams\":18,\"note\":\"krátky slovenský komentár o tejto káve (1–2 vety)\"}"}]}]})
+            {type:"text",text:"Pozri sa na túto fotografiu kávy — môžu to byť zrná, mletá káva, šálka alebo obal.\nAk vidíš obal alebo etiketu, identifikuj názov kávy a pražiareň.\nOdporuč praženosť (light/medium/dark), pomer vody ku káve (napr. 15 pre 1:15), nastavenie mlynčeka Fellow Ode Gen 2 (číslo 1–11) a množstvo kávy v gramoch.\nOdpovedz výhradne v JSON, bez textu navyše:\n{\"roast\":\"light|medium|dark\",\"ratio\":15,\"grind\":3.5,\"grams\":18,\"coffeeName\":\"názov kávy ak vidíš\",\"coffeeRoaster\":\"názov pražiarne ak vidíš\",\"note\":\"krátky slovenský komentár o tejto káve (1–2 vety)\"}"}]}]})
       }).then(function(r){return r.json();}).then(function(d){
         var txt=(d.content||[]).find(function(b){return b.type==="text";});
         if(!txt)throw new Error("Žiadna odpoveď.");
         return JSON.parse(txt.text.replace(/```json|```/g,"").trim());
       });
     }
-    promise.then(function(r){setResult(r);setLoading(false);}).catch(function(){setError("Niečo sa pokazilo. Skontroluj API kľúč alebo skús znova.");setLoading(false);});
+    promise.then(function(r){
+      setResult(r);setLoading(false);
+      if(r.coffeeName)setCoffeeName(r.coffeeName);
+      if(r.coffeeRoaster)setCoffeeRoaster(r.coffeeRoaster);
+    }).catch(function(){setError("Niečo sa pokazilo. Skontroluj API kľúč alebo skús znova.");setLoading(false);});
+  }
+
+  function selectCoffee(c){
+    setCoffeeName(c.name);
+    setCoffeeRoaster(c.roaster);
+    var ri=ROASTS.findIndex(function(r){return r.id===c.roast;});
+    if(ri>=0&&setSelectedCoffee){
+      setSelectedCoffee({name:c.name,roaster:c.roaster,roast:c.roast});
+    }
+  }
+
+  function applyResult(){
+    var coffee={name:coffeeName,roaster:coffeeRoaster,roast:result.roast};
+    if(coffeeName){saveCoffee(coffee);setCoffees(loadCoffees());}
+    onApply(result,coffee);
   }
 
   return h("div",{style:{paddingBottom:20}},
-    h(Card,null,h("p",{style:{color:C.textMid,fontSize:13,lineHeight:1.6}},"Odfot zrná, mletú kávu alebo šálku. Odporučíme praženosť, pomer a nastavenie Ode 2 — a môžeš rovno zalievať.")),
+    h(Card,null,h("p",{style:{color:C.textMid,fontSize:13,lineHeight:1.6}},"Odfot zrná, mletú kávu alebo obal. Odporučíme praženosť, pomer a nastavenie Ode 2 — a môžeš rovno zalievať.")),
 
     hasProxy===false?h(Card,null,
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
@@ -354,8 +386,21 @@ function ScanTab(props){
     h("div",{onClick:function(){if(fileRef.current)fileRef.current.click();},
       style:{border:"1.5px dashed "+C.border,borderRadius:14,padding:image?0:"36px 16px",textAlign:"center",cursor:"pointer",marginBottom:12,overflow:"hidden"}},
       image?h("img",{src:image,alt:"",style:{width:"100%",maxHeight:220,objectFit:"cover",display:"block"}}):
-        h("div",null,h("div",{style:{fontSize:36,marginBottom:10}},"\u2615"),h("div",{style:{color:C.textMid,fontSize:14,marginBottom:4}},"Odfot kávu"),h("div",{style:{color:C.textDim,fontSize:12}},"Zrná, mletá káva alebo šálka"))),
+        h("div",null,h("div",{style:{fontSize:36,marginBottom:10}},"\u2615"),h("div",{style:{color:C.textMid,fontSize:14,marginBottom:4}},"Odfot kávu"),h("div",{style:{color:C.textDim,fontSize:12}},"Zrná, mletá káva alebo obal"))),
     h("input",{ref:fileRef,type:"file",accept:"image/*",style:{display:"none"},onChange:function(ev){handleFile(ev.target.files[0]);}}),
+
+    // Recent coffees selector
+    coffees.length>0&&!result?h(Card,null,
+      h(Lbl,null,"Posledné kávy"),
+      coffees.slice(0,5).map(function(c){
+        return h("button",{key:c.id,onClick:function(){selectCoffee(c);},
+          style:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",border:"1px solid "+C.border,borderRadius:8,background:"transparent",color:C.text,marginBottom:6,textAlign:"left"}},
+          h("div",null,
+            h("div",{style:{fontSize:13,color:C.text,fontWeight:600}},c.name),
+            c.roaster?h("div",{style:{fontSize:11,color:C.textDim}},c.roaster):null),
+          h("div",{style:{fontSize:10,color:C.goldDim,fontFamily:mono}},{light:"Svetlá",medium:"Stredná",dark:"Tmavá"}[c.roast]||c.roast));
+      })
+    ):null,
 
     image&&!result?h("button",{onClick:analyze,disabled:(!hasProxy&&!apiKey)||loading,
       style:{width:"100%",padding:16,border:"none",borderRadius:12,background:(hasProxy||apiKey)?C.gold:C.border,color:(hasProxy||apiKey)?C.bg:C.textDim,fontSize:15,fontFamily:pf,fontWeight:700,marginBottom:12}},
@@ -373,7 +418,13 @@ function ScanTab(props){
             h("div",{style:{fontFamily:pf,fontSize:22,color:C.gold,fontWeight:700}},item.v));
         })),
       result.note?h("div",{style:{fontSize:13,color:C.textMid,lineHeight:1.6,marginBottom:16,fontStyle:"italic",borderLeft:"2px solid "+C.border,paddingLeft:12}},result.note):null,
-      h("button",{onClick:function(){onApply(result);},
+      // Coffee name + roaster inputs
+      h("div",{style:{marginBottom:14}},
+        h("input",{type:"text",value:coffeeName,onChange:function(ev){setCoffeeName(ev.target.value);},placeholder:"Názov kávy",
+          style:{width:"100%",padding:"10px 12px",border:"1px solid "+C.border,borderRadius:8,background:C.surface,color:C.text,fontSize:13,outline:"none",marginBottom:8}}),
+        h("input",{type:"text",value:coffeeRoaster,onChange:function(ev){setCoffeeRoaster(ev.target.value);},placeholder:"Pražiareň",
+          style:{width:"100%",padding:"10px 12px",border:"1px solid "+C.border,borderRadius:8,background:C.surface,color:C.text,fontSize:13,outline:"none"}})),
+      h("button",{onClick:applyResult,
         style:{width:"100%",padding:14,border:"1px solid "+C.gold,borderRadius:10,background:"transparent",color:C.gold,fontSize:14,fontFamily:pf,fontWeight:600}},"Použiť v recepte")
     ):null
   );
@@ -405,7 +456,6 @@ function LogTab(props){
     var dn=["Nedeľa","Pondelok","Utorok","Streda","Štvrtok","Piatok","Sobota"];
     return dn[d.getDay()]+" "+d.getDate()+"."+(d.getMonth()+1)+".";
   }
-  function rc(id){var r=ROASTS.find(function(x){return x.id===id;});return r?C.gold:C.goldDim;}
 
   if(total===0)return h("div",{style:{paddingBottom:20}},
     h(Card,{style:{textAlign:"center",padding:"40px 20px"}},
@@ -426,11 +476,12 @@ function LogTab(props){
       return h("div",{key:day,style:{marginBottom:14}},
         h("div",{style:{fontSize:10,color:C.textDim,letterSpacing:"1px",textTransform:"uppercase",marginBottom:8,paddingLeft:4,fontFamily:mono}},fmtDay(day)),
         groups[day].map(function(item){var e=item.entry;
+          var mainLabel=e.coffeeName?(e.coffeeName+(e.coffeeRoaster?" · "+e.coffeeRoaster:"")):e.roastSk;
           return h(Card,{key:item.idx,style:{marginBottom:8}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
               h("div",{style:{display:"flex",alignItems:"center",gap:8}},
                 h("div",{style:{width:8,height:8,borderRadius:"50%",background:C.gold}}),
-                h("div",{style:{fontSize:13,color:C.gold,fontWeight:600,fontFamily:pf}},e.roastSk)),
+                h("div",{style:{fontSize:13,color:C.gold,fontWeight:600,fontFamily:pf}},mainLabel)),
               h("div",{style:{display:"flex",alignItems:"center",gap:8}},
                 h("div",{style:{fontSize:10,color:C.textDim,fontFamily:mono}},fmtDate(e.date)),
                 h("button",{onClick:function(){del(item.idx);},style:{background:"transparent",border:"none",color:C.textDim,fontSize:12,padding:"2px 6px"}},"\u00D7"))),
@@ -448,10 +499,18 @@ function LogTab(props){
 function App(){
   var _splash=useState(true),showSplash=_splash[0],setSplash=_splash[1];
   var _tab=useState(0),tab=_tab[0],setTab=_tab[1];
-  var _applied=useState(null),applied=_applied[0],setApplied=_applied[1];
+  var _ri=useState(1),roastIdx=_ri[0],setRoastIdx=_ri[1];
+  var _coffee=useState(null),selectedCoffee=_coffee[0],setSelectedCoffee=_coffee[1];
   var _lv=useState(0),logVersion=_lv[0],setLogVersion=_lv[1];
 
-  function handleApply(result){setApplied(result);setTab(2);}
+  var roast=ROASTS[roastIdx];
+
+  function handleApply(result,coffee){
+    var ri=ROASTS.findIndex(function(r){return r.id===result.roast;});
+    if(ri>=0)setRoastIdx(ri);
+    if(coffee)setSelectedCoffee(coffee);
+    setTab(2);
+  }
   function onBrewComplete(entry){var l=loadLog();l.push(entry);saveLog(l);setLogVersion(function(v){return v+1;});}
 
   var tabs=[{l:"Odfoť"},{l:"Zomeľ"},{l:"Zalej"},{l:"Denník"}];
@@ -461,7 +520,6 @@ function App(){
   return h("div",{style:{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Helvetica Neue',Helvetica,sans-serif"}},
     // Header
     h("div",{style:{padding:"44px 24px 0",textAlign:"center"}},
-      h("div",{style:{fontSize:10,letterSpacing:"0.22em",textTransform:"uppercase",color:C.goldDim,marginBottom:8,fontFamily:mono}},"Pour over"),
       h("h1",{style:{fontFamily:pf,fontSize:28,fontWeight:700,color:C.text,marginBottom:4}},"Bloom"),
       h("p",{style:{fontSize:13,color:C.textDim,fontStyle:"italic",fontFamily:pf,marginBottom:24}},"When coffee wakes up.")),
 
@@ -474,9 +532,9 @@ function App(){
 
     // Content
     h("div",{style:{padding:"0 24px",maxWidth:480,margin:"0 auto"}},
-      tab===0?h(ScanTab,{onApply:handleApply}):
-      tab===1?h(GrindTab):
-      tab===2?h(BrewTab,{onComplete:onBrewComplete,key:JSON.stringify(applied)}):
+      tab===0?h(ScanTab,{onApply:handleApply,setSelectedCoffee:setSelectedCoffee}):
+      tab===1?h(GrindTab,{roastIdx:roastIdx,setRoastIdx:setRoastIdx}):
+      tab===2?h(BrewTab,{onComplete:onBrewComplete,roast:roast,coffee:selectedCoffee,key:roastIdx+"-"+(selectedCoffee?selectedCoffee.name:"")}):
       h(LogTab,{key:logVersion})),
 
     // Footer
