@@ -180,9 +180,9 @@ function BrewTab(props){
     var diff=doneActual-tt;
     var gs=grindSetting;
     var fb;
-    if(diff<=-10)fb={c:C.gold,t:"Skús posunúť z "+gs+" na "+(Math.round((gs-0.5)*10)/10)+". Jemnejšie mletie pre plnšiu chuť."};
+    if(diff<=-10)fb={c:C.gold,t:"Skús posunúť z "+gs+" na "+(Math.round((gs-0.25)*100)/100)+". Jemnejšie mletie pre plnšiu chuť."};
     else if(diff<=15)fb={c:C.gold,t:"Mletie "+gs+" sedí. Presne tak."};
-    else fb={c:C.textMid,t:"Skús posunúť z "+gs+" na "+(Math.round((gs+0.5)*10)/10)+". Hrubšie mletie spomalí extrakciu."};
+    else fb={c:C.textMid,t:"Skús posunúť z "+gs+" na "+(Math.round((gs+0.25)*100)/100)+". Hrubšie mletie spomalí extrakciu."};
     return h("div",{style:{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}},
       h("img",{src:"https://images.unsplash.com/photo-1442512595331-e89e73853f31?w=800&q=80&auto=format&fit=crop",alt:"",
         style:{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"saturate(0.6) brightness(0.7)"}}),
@@ -300,10 +300,10 @@ function GrindTab(props){
       h("div",{style:{borderTop:"1px solid "+C.border,paddingTop:14,marginTop:8}},
         h("div",{style:{fontSize:10,color:C.textDim,letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:6,fontFamily:mono}},"Kde začať"),
         h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:20,marginBottom:8}},
-          h("button",{onClick:function(){setGrindSetting(function(g){return Math.max(roast.grind.min,Math.round((g-0.5)*10)/10);});},
+          h("button",{onClick:function(){setGrindSetting(function(g){return Math.max(0.25,Math.round((g-0.25)*100)/100);});},
             style:{width:40,height:40,border:"1px solid "+C.border,borderRadius:"50%",background:"none",color:C.textMid,fontSize:20,display:"flex",alignItems:"center",justifyContent:"center"}},"\u2212"),
           h("div",{style:{fontFamily:pf,fontSize:36,color:C.gold,fontWeight:700,minWidth:60,textAlign:"center"}},grindSetting),
-          h("button",{onClick:function(){setGrindSetting(function(g){return Math.min(roast.grind.max,Math.round((g+0.5)*10)/10);});},
+          h("button",{onClick:function(){setGrindSetting(function(g){return Math.round((g+0.25)*100)/100;});},
             style:{width:40,height:40,border:"1px solid "+C.border,borderRadius:"50%",background:"none",color:C.textMid,fontSize:20,display:"flex",alignItems:"center",justifyContent:"center"}},"+")),
         h("div",{style:{fontSize:13,color:C.textMid,lineHeight:1.6,fontStyle:"italic",textAlign:"center"}},"Horkastá \u2192 hrubšie. Kyslá \u2192 jemnejšie.")))
   );
@@ -456,9 +456,10 @@ function LogTab(props){
   function clearAll(){setLog([]);saveLog([]);}
 
   var total=log.length;
+  var last10=log.slice(-10);
   var totalDiff=0;
-  log.forEach(function(e){totalDiff+=Math.abs((e.time||0)-(e.planned||0));});
-  var avgDiff=total>0?Math.round(totalDiff/total):0;
+  last10.forEach(function(e){totalDiff+=Math.abs((e.time||0)-(e.planned||0));});
+  var avgDiff=last10.length>0?Math.round(totalDiff/last10.length):0;
   var rank=total>0?getRank(avgDiff):"–";
 
   var groups={};
