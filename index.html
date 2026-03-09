@@ -45,7 +45,7 @@ var POUR_PHASES=[
   {name:"Prvý nálev",icon:"\u223F",desc:"Plynulý, stabilný prúd v kruhoch. Buduj hladinu rovnomerne — tempo robí chuť.",duration:30,waterFraction:0.45},
   {name:"Druhý nálev",icon:"\u223F",desc:"Posledný pour. Zakonči pred okrajom filtra — stredu patrí najlepšia extrakcia.",duration:30,waterFraction:0.40},
 ];
-var DRIP_SECS=[0,75,90,120,150,165];
+var DRIP_SECS=[0,90,135,165,195,225];
 function getPhases(cups){
   var drip=DRIP_SECS[cups]||90;
   return POUR_PHASES.concat([{name:"Kvapkanie",icon:"\u231B",desc:"Nechaj gravitáciu pracovať. Jemne zakrúť drip-perom — pomôže rovnomernej extrakcii.",duration:drip,waterFraction:0}]);
@@ -124,7 +124,7 @@ function BrewTab(props){
   var coffee=props.coffee;
   var grindSetting=props.grindSetting;
   var _cups=useState(2),cups=_cups[0],setCups=_cups[1];
-  var _g=useState(18),grams=_g[0],setGrams=_g[1];
+  var _g=useState(30),grams=_g[0],setGrams=_g[1];
   var _p=useState(-1),phase=_p[0],setPhase=_p[1];
   var _tl=useState(0),timeLeft=_tl[0],setTimeLeft=_tl[1];
   var ivRef=useRef(null);
@@ -136,7 +136,7 @@ function BrewTab(props){
   var tt=totalTime(cups);
 
   // Sync grams when cups change
-  useEffect(function(){setGrams(cups*9);},[cups]);
+  useEffect(function(){setGrams(cups*15);},[cups]);
 
   function cumWater(pi){return Math.round(phases.slice(0,pi+1).reduce(function(s,p){return s+p.waterFraction*water;},0));}
   function addWater(pi){return Math.round(phases[pi].waterFraction*water);}
@@ -216,16 +216,16 @@ function BrewTab(props){
             style:{flex:1,padding:"14px 4px",border:"1px solid "+(cups===n?C.gold:C.border),borderRadius:10,
               background:cups===n?"rgba(201,169,110,0.1)":"transparent",color:cups===n?C.gold:C.textMid,textAlign:"center",transition:"all 0.15s"}},
             h("div",{style:{fontFamily:pf,fontSize:20,fontWeight:700}},n),
-            h("div",{style:{fontSize:9,opacity:0.6,marginTop:2,fontFamily:mono}},n*9+"g"));
+            h("div",{style:{fontSize:9,opacity:0.6,marginTop:2,fontFamily:mono}},n*15+"g"));
         })),
       // Grams fine-tune
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:20,marginBottom:16}},
-        h("button",{onClick:function(){setGrams(function(g){return Math.max(9,g-1);});},
+        h("button",{onClick:function(){setGrams(function(g){return Math.max(10,g-1);});},
           style:{width:36,height:36,border:"1px solid "+C.border,borderRadius:"50%",background:"none",color:C.textMid,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}},"\u2212"),
         h("div",{style:{textAlign:"center"}},
           h("span",{style:{fontFamily:pf,fontSize:36,fontWeight:700,color:C.text}},grams),
           h("span",{style:{color:C.textDim,fontSize:13,marginLeft:6}},"g")),
-        h("button",{onClick:function(){setGrams(function(g){return Math.min(45,g+1);});},
+        h("button",{onClick:function(){setGrams(function(g){return Math.min(80,g+1);});},
           style:{width:36,height:36,border:"1px solid "+C.border,borderRadius:"50%",background:"none",color:C.textMid,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}},"+")),
       // Recipe summary
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:0}},
