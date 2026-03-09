@@ -40,12 +40,16 @@ var ROASTS=[
    grind:{min:2.5,max:4,start:3,tip:"Začni na 3. Ak je plochá alebo prázdna, skús o pol stupňa vyššie."}},
 ];
 
-var PHASES=[
-  {name:"Bloom",icon:"\u2615",desc:"Jemne prelej všetku kávu. Krúživý pohyb od stredu — nech sa zrná zbavia CO\u2082.",duration:30,waterFraction:0.15},
+var POUR_PHASES=[
+  {name:"Bloom",icon:"\u2615",desc:"Jemne prelej všetku kávu. Krúživý pohyb od stredu — nech sa zrná zbavia CO\u2082.",duration:45,waterFraction:0.15},
   {name:"Prvý nálev",icon:"\u223F",desc:"Plynulý, stabilný prúd v kruhoch. Buduj hladinu rovnomerne — tempo robí chuť.",duration:30,waterFraction:0.45},
   {name:"Druhý nálev",icon:"\u223F",desc:"Posledný pour. Zakonči pred okrajom filtra — stredu patrí najlepšia extrakcia.",duration:30,waterFraction:0.40},
-  {name:"Kvapkanie",icon:"\u231B",desc:"Nechaj gravitáciu pracovať. Jemne zakrúť drip-perom — pomôže rovnomernej extrakcii.",duration:60,waterFraction:0},
 ];
+var DRIP_SECS=[0,75,90,120,150,165];
+function getPhases(cups){
+  var drip=DRIP_SECS[cups]||90;
+  return POUR_PHASES.concat([{name:"Kvapkanie",icon:"\u231B",desc:"Nechaj gravitáciu pracovať. Jemne zakrúť drip-perom — pomôže rovnomernej extrakcii.",duration:drip,waterFraction:0}]);
+}
 
 var C={bg:"#0f0d0b",surface:"#1a1612",card:"#201c18",border:"#2e2820",gold:"#c9a96e",goldDim:"#8a7050",
        text:"#e8ddd0",textMid:"#a09080",textDim:"#6a5f52"};
@@ -69,7 +73,7 @@ function saveCoffee(coffee){
 var pf="'Playfair Display',Georgia,serif";
 var mono="'Courier New',monospace";
 
-function totalTime(){return PHASES.reduce(function(s,p){return s+p.duration;},0);}
+function totalTime(cups){return getPhases(cups||2).reduce(function(s,p){return s+p.duration;},0);}
 function fmtTime(s){return Math.floor(s/60)+":"+(s%60<10?"0":"")+(s%60);}
 
 function Card(props){
@@ -128,25 +132,26 @@ function BrewTab(props){
   var _os=useState(0),overSec=_os[0],setOverSec=_os[1];
   var _da=useState(0),doneActual=_da[0],setDoneActual=_da[1];
   var water=grams*roast.ratio;
-  var tt=totalTime();
+  var phases=getPhases(cups);
+  var tt=totalTime(cups);
 
   // Sync grams when cups change
   useEffect(function(){setGrams(cups*9);},[cups]);
 
-  function cumWater(pi){return Math.round(PHASES.slice(0,pi+1).reduce(function(s,p){return s+p.waterFraction*water;},0));}
-  function addWater(pi){return Math.round(PHASES[pi].waterFraction*water);}
+  function cumWater(pi){return Math.round(phases.slice(0,pi+1).reduce(function(s,p){return s+p.waterFraction*water;},0));}
+  function addWater(pi){return Math.round(phases[pi].waterFraction*water);}
 
   function elapsed(){
     if(phase<0)return 0;
-    if(phase>=PHASES.length)return tt;
-    return PHASES.slice(0,phase).reduce(function(s,p){return s+p.duration;},0)+(PHASES[phase].duration-timeLeft);
+    if(phase>=phases.length)return tt;
+    return phases.slice(0,phase).reduce(function(s,p){return s+p.duration;},0)+(phases[phase].duration-timeLeft);
   }
 
   function finishBrew(){
     clearInterval(ivRef.current);
     var el=isOvertime?tt+overSec:elapsed();
     setDoneActual(el);
-    setPhase(PHASES.length);
+    setPhase(phases.length);
     if(onComplete){
       var entry={date:new Date().toISOString(),roast:roast.id,roastSk:roast.label,grams:grams,water:water,ratio:"1:"+roast.ratio,time:el,planned:tt,grind:grindSetting};
       if(coffee&&coffee.name){entry.coffeeName=coffee.name;entry.coffeeRoaster=coffee.roaster||"";}
@@ -155,14 +160,14 @@ function BrewTab(props){
   }
 
   useEffect(function(){
-    if(phase>=0&&phase<PHASES.length){
-      setTimeLeft(PHASES[phase].duration);
+    if(phase>=0&&phase<phases.length){
+      setTimeLeft(phases[phase].duration);
       setIsOvertime(false);setOverSec(0);
       clearInterval(ivRef.current);
       ivRef.current=setInterval(function(){
         setTimeLeft(function(t){
           if(t<=1){
-            if(phase===PHASES.length-1){clearInterval(ivRef.current);setIsOvertime(true);ivRef.current=setInterval(function(){setOverSec(function(s){return s+1;});},1000);return 0;}
+            if(phase===phases.length-1){clearInterval(ivRef.current);setIsOvertime(true);ivRef.current=setInterval(function(){setOverSec(function(s){return s+1;});},1000);return 0;}
             clearInterval(ivRef.current);setPhase(function(p){return p+1;});return 0;
           }
           return t-1;
@@ -172,8 +177,8 @@ function BrewTab(props){
     return function(){clearInterval(ivRef.current);};
   },[phase]);
 
-  var done=phase===PHASES.length;
-  var isDrip=phase===PHASES.length-1;
+  var done=phase===phases.length;
+  var isDrip=phase===phases.length-1;
 
   // ── Done screen — fullscreen with photo background ──
   if(done){
@@ -241,19 +246,19 @@ function BrewTab(props){
 
     // Timer — running
     phase>=0&&!done?h(Card,{style:{textAlign:"center",padding:"24px 20px"}},
-      h("div",{style:{fontSize:11,color:C.textDim,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:6,fontFamily:mono}},"Fáza "+(phase+1)+" z "+PHASES.length),
-      h("div",{style:{fontFamily:pf,fontSize:26,fontWeight:700,color:C.text,marginBottom:4}},PHASES[phase].name),
-      h("div",{style:{fontSize:13,color:C.textMid,lineHeight:1.6,marginBottom:24,minHeight:44}},PHASES[phase].desc),
+      h("div",{style:{fontSize:11,color:C.textDim,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:6,fontFamily:mono}},"Fáza "+(phase+1)+" z "+phases.length),
+      h("div",{style:{fontFamily:pf,fontSize:26,fontWeight:700,color:C.text,marginBottom:4}},phases[phase].name),
+      h("div",{style:{fontSize:13,color:C.textMid,lineHeight:1.6,marginBottom:24,minHeight:44}},phases[phase].desc),
       h("div",{style:{fontFamily:mono,fontSize:58,fontWeight:700,color:isOvertime?"#c06050":C.gold,lineHeight:1,marginBottom:8}},
         (function(){var v=isOvertime?tt+overSec:timeLeft;return(Math.floor(v/60)<10?"0":"")+Math.floor(v/60)+":"+(v%60<10?"0":"")+(v%60);})()),
       isOvertime?h("div",{style:{fontSize:12,color:"#c06050",marginBottom:20}},"Plánovaný čas uplynul · +"+overSec+"s"):
-      PHASES[phase].waterFraction>0?h("div",{style:{fontSize:12,color:C.textDim,marginBottom:20}},
+      phases[phase].waterFraction>0?h("div",{style:{fontSize:12,color:C.textDim,marginBottom:20}},
         "Zalej na ",h("strong",{style:{color:C.gold}},cumWater(phase)+" ml"),
         h("span",{style:{color:C.textDim}}," (+"+addWater(phase)+" ml)")):
         h("div",{style:{fontSize:12,color:C.textDim,marginBottom:20}},"Nechaj odkvapkať"),
       // Progress dots
       h("div",{style:{display:"flex",gap:4,marginBottom:20}},
-        PHASES.map(function(_,i){return h("div",{key:i,style:{flex:1,height:2,borderRadius:1,background:i<phase?C.gold:i===phase?C.goldDim:C.border,transition:"background 0.3s"}});})),
+        phases.map(function(_,i){return h("div",{key:i,style:{flex:1,height:2,borderRadius:1,background:i<phase?C.gold:i===phase?C.goldDim:C.border,transition:"background 0.3s"}});})),
       isDrip?h("button",{onClick:finishBrew,style:{width:"100%",padding:14,border:"none",borderRadius:10,background:C.gold,color:C.bg,fontSize:14,fontWeight:700,fontFamily:pf}},"Dokončiť"):
         h("button",{onClick:function(){clearInterval(ivRef.current);setPhase(-1);setIsOvertime(false);setOverSec(0);},style:{width:"100%",padding:12,border:"1px solid "+C.border,borderRadius:10,background:"none",color:C.textDim,fontSize:13}},"Skončiť")
     ):null,
@@ -262,15 +267,15 @@ function BrewTab(props){
     phase===-1?h(Card,null,
       h(Lbl,null,"Fázy liatia"),
       h("div",{style:{fontSize:11,color:C.textDim,marginBottom:14,fontStyle:"italic"}},"Váha na váhe je kumulatívna — nemusíš nulovať po každom náleve."),
-      PHASES.map(function(p,i){
-        return h("div",{key:i,style:{display:"flex",gap:12,paddingBottom:14,marginBottom:i<PHASES.length-1?14:0,borderBottom:i<PHASES.length-1?"1px solid "+C.border:"none"}},
+      phases.map(function(p,i){
+        return h("div",{key:i,style:{display:"flex",gap:12,paddingBottom:14,marginBottom:i<phases.length-1?14:0,borderBottom:i<phases.length-1?"1px solid "+C.border:"none"}},
           h("div",{style:{width:8,height:8,borderRadius:"50%",background:C.border,marginTop:6,flexShrink:0}}),
           h("div",{style:{flex:1}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:3}},
               h("span",{style:{fontSize:14,color:C.text,fontWeight:600}},
                 p.name+" ",h("span",{style:{color:C.gold,fontFamily:mono,fontWeight:700}},cumWater(i)+"ml"),
                 h("span",{style:{color:C.textDim,fontSize:11,fontFamily:mono}}," +"+addWater(i))),
-              h("span",{style:{fontSize:11,color:C.textDim,fontFamily:mono}},fmtTime(PHASES.slice(0,i).reduce(function(s,x){return s+x.duration;},0)))),
+              h("span",{style:{fontSize:11,color:C.textDim,fontFamily:mono}},fmtTime(phases.slice(0,i).reduce(function(s,x){return s+x.duration;},0)))),
             h("div",{style:{fontSize:12,color:C.textDim,lineHeight:1.5}},p.desc)));
       })
     ):null
