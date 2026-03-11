@@ -40,16 +40,18 @@ var ROASTS=[
    grind:{min:2.5,max:4,start:3,tip:"Začni na 3. Ak je plochá alebo prázdna, skús o pol stupňa vyššie."}},
 ];
 
+var DRIP_SECS=[0,110,130,150,170,190];
 function getPhases(cups,ratio){
   var bloomFrac=2/ratio;
   var rest=1-bloomFrac;
   var p1=25+cups*5;
   var p2=20+cups*5;
+  var drip=DRIP_SECS[cups]||130;
   return[
     {name:"Bloom",icon:"\u2615",desc:"Prelej 2\u00D7 váhu kávy. Krúživý pohyb od stredu — nech sa zrná zbavia CO\u2082.",duration:45,waterFraction:bloomFrac},
     {name:"Prvý nálev",icon:"\u223F",desc:"Plynulý, stabilný prúd v kruhoch. Buduj hladinu rovnomerne — tempo robí chuť.",duration:p1,waterFraction:rest*0.6},
     {name:"Druhý nálev",icon:"\u223F",desc:"Posledný pour. Zakonči pred okrajom filtra — stredu patrí najlepšia extrakcia.",duration:p2,waterFraction:rest*0.4},
-    {name:"Kvapkanie",icon:"\u231B",desc:"Nechaj gravitáciu pracovať. Jemne zakrúť drip-perom — pomôže rovnomernej extrakcii.",duration:60,waterFraction:0},
+    {name:"Kvapkanie",icon:"\u231B",desc:"Nechaj gravitáciu pracovať. Jemne zakrúť drip-perom — pomôže rovnomernej extrakcii.",duration:drip,waterFraction:0},
   ];
 }
 
