@@ -40,15 +40,17 @@ var ROASTS=[
    grind:{min:2.5,max:4,start:3,tip:"Začni na 3. Ak je plochá alebo prázdna, skús o pol stupňa vyššie."}},
 ];
 
-var POUR_PHASES=[
-  {name:"Bloom",icon:"\u2615",desc:"Jemne prelej všetku kávu. Krúživý pohyb od stredu — nech sa zrná zbavia CO\u2082.",duration:45,waterFraction:0.15},
-  {name:"Prvý nálev",icon:"\u223F",desc:"Plynulý, stabilný prúd v kruhoch. Buduj hladinu rovnomerne — tempo robí chuť.",duration:30,waterFraction:0.45},
-  {name:"Druhý nálev",icon:"\u223F",desc:"Posledný pour. Zakonči pred okrajom filtra — stredu patrí najlepšia extrakcia.",duration:30,waterFraction:0.40},
-];
-var DRIP_SECS=[0,90,135,165,195,225];
-function getPhases(cups){
-  var drip=DRIP_SECS[cups]||90;
-  return POUR_PHASES.concat([{name:"Kvapkanie",icon:"\u231B",desc:"Nechaj gravitáciu pracovať. Jemne zakrúť drip-perom — pomôže rovnomernej extrakcii.",duration:drip,waterFraction:0}]);
+function getPhases(cups,ratio){
+  var bloomFrac=2/ratio;
+  var rest=1-bloomFrac;
+  var p1=25+cups*5;
+  var p2=20+cups*5;
+  return[
+    {name:"Bloom",icon:"\u2615",desc:"Prelej 2\u00D7 váhu kávy. Krúživý pohyb od stredu — nech sa zrná zbavia CO\u2082.",duration:45,waterFraction:bloomFrac},
+    {name:"Prvý nálev",icon:"\u223F",desc:"Plynulý, stabilný prúd v kruhoch. Buduj hladinu rovnomerne — tempo robí chuť.",duration:p1,waterFraction:rest*0.6},
+    {name:"Druhý nálev",icon:"\u223F",desc:"Posledný pour. Zakonči pred okrajom filtra — stredu patrí najlepšia extrakcia.",duration:p2,waterFraction:rest*0.4},
+    {name:"Kvapkanie",icon:"\u231B",desc:"Nechaj gravitáciu pracovať. Jemne zakrúť drip-perom — pomôže rovnomernej extrakcii.",duration:60,waterFraction:0},
+  ];
 }
 
 var C={bg:"#0f0d0b",surface:"#1a1612",card:"#201c18",border:"#2e2820",gold:"#c9a96e",goldDim:"#8a7050",
@@ -73,7 +75,7 @@ function saveCoffee(coffee){
 var pf="'Playfair Display',Georgia,serif";
 var mono="'Courier New',monospace";
 
-function totalTime(cups){return getPhases(cups||2).reduce(function(s,p){return s+p.duration;},0);}
+function totalTime(cups,ratio){return getPhases(cups||2,ratio||16).reduce(function(s,p){return s+p.duration;},0);}
 function fmtTime(s){return Math.floor(s/60)+":"+(s%60<10?"0":"")+(s%60);}
 
 function Card(props){
@@ -132,8 +134,8 @@ function BrewTab(props){
   var _os=useState(0),overSec=_os[0],setOverSec=_os[1];
   var _da=useState(0),doneActual=_da[0],setDoneActual=_da[1];
   var water=grams*roast.ratio;
-  var phases=getPhases(cups);
-  var tt=totalTime(cups);
+  var phases=getPhases(cups,roast.ratio);
+  var tt=totalTime(cups,roast.ratio);
 
   // Sync grams when cups change
   useEffect(function(){setGrams(cups*15);},[cups]);
